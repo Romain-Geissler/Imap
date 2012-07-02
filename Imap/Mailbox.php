@@ -3,9 +3,14 @@
 namespace Imap;
 
 class Mailbox{
+	const ASCENDING_SORT=0;
+	const DESCENDING_SORT=1;
+	const ALL_MESSAGES_CRITERIA='ALL';
+
 	protected $imap;
 	protected $path;
 	protected $fetchedMailboxes;
+	protected $fetchedMessages;
 
 	public function __construct(Imap $imap,Mailbox $parent=null,$name=null){
 		$this->imap=$imap;
@@ -18,6 +23,7 @@ class Mailbox{
 		}
 
 		$this->fetchedMailboxes=[];
+		$this->fetchedMessages=[];
 	}
 
 	public function getImap(){
@@ -145,7 +151,7 @@ class Mailbox{
 			throw new ImapException(sprintf('Failed to delete mailbox "%s"',$fullMailboxServerPath));
 		}
 
-		$this->clearFetchedMailboxes();
+		$this->clear();
 
 		unset($this->parent->fetchedMailboxes[$this->getName()]);
 	}
@@ -193,13 +199,118 @@ class Mailbox{
 
 	public function clearFetchedMailboxes(){
 		foreach($this->fetchedMailboxes as $fetchedMailbox){
-			$fetchedMailbox->clearFetchedMailboxes();
+			$fetchedMailbox->clear();
 		}
 
 		$this->fetchedMailboxes=[];
 	}
 
+	public function getMessages($criterias=self::ALL_MESSAGES_CRITERIA){
+		imap_errors();
+		$messagesIds=imap_search($this->getResource(),$criterias,SE_UID);
+
+		if($messagesIds===false){
+			if(imap_last_error()===false){
+				return [];
+			}else{
+				throw new ImapException(sprintf('Failed to get message matching criterias "%s" in mailbox "%s"',$criterias,$this));
+			}
+		}
+
+		return $this->getMessagesFromIds($messagesIds);
+	}
+
+	public function getSortedMessages($sortCriteria,$sortOrder=self::ASCENDING_SORT,$criterias=self::ALL_MESSAGES_CRITERIA){
+		imap_errors();
+		$messagesIds=imap_sort($this->getResource(),$sortCriteria,$sortOrder,SE_UID|SE_NOPREFETCH,$criterias);
+
+		if($messagesIds===false){
+			if(imap_last_error()===false){
+				return [];
+			}else{
+				throw new ImapException(sprintf('Failed to sort message by "%s" (%s) matching criterias "%s" in mailbox "%s"',$sortCriteria,$sortOrder==static::ASCENDING_SORT?'ASC':'DESC',$criterias,$this));
+			}
+		}
+
+		return $this->getMessagesFromIds($messagesIds);
+	}
+
+	public function getResource($moveToThisMailbox=true){
+		return $this->imap->getResource($moveToThisMailbox?$this->path:null);
+	}
+
+	public function getFetchedMessages(){
+		return $this->fetchedMessages;
+	}
+
+	public function clearFetchedMessages(){
+		$this->fetchedMessages=[];
+	}
+
+	public function clear(){
+		$this->clearFetchedMessages();
+		$this->clearFetchedMailboxes();
+	}
+
+	public function notifyDeletedMessage($messageId){
+		unset($this->fetchedMessages[$messageId]);
+	}
+
+	public function notifyMovedMessage(Mailbox $newMailbox,$oldMessageId,$newMessageId){
+		$newMailbox->fetchedMessages[$newMessageId]=$this->fetchedMessages[$oldMessageId];
+
+		unset($this->fetchedMessages[$oldMessageId]);
+	}
+
+	public function notifyCopiedMessage($newMessageId){
+		return $this->fetchedMessages[$newMessageId]=new Message($this,$newMessageId);
+	}
+
+	public function notifyAddedMessage($newMessageId){
+		return $this->fetchedMessages[$newMessageId]=new Message($this,$newMessageId);
+	}
+
+	public function getNextMessageId(){
+		if(($status=imap_status($this->getResource(false),$this->imap->computeFullMailboxServerPath($this->path),SA_UIDNEXT))===false){
+			throw new ImapException(sprintf('Failed to get next message id for mailbox "%s"',this));
+		}
+
+		return $status->uidnext;
+	}
+
+	public function getMessageCount(){
+		return imap_num_msg($this->getResource());
+	}
+
+	public function getRecentMessageCount(){
+		return imap_num_recent($this->getResource());
+	}
+
+	public function addMessage($stringMessage,$flags=0){
+		$newMessageId=$this->getNextMessageId();
+
+		if(!imap_append($this->getResource(false),$this->imap->computeFullMailboxServerPath($this->path),$stringMessage,Message::flagsToString($flags))){
+			throw new ImapException(sprintf('Failed to add new message in mailbox "%s"',$this));
+		}
+
+		return $this->notifyAddedMessage($newMessageId);
+	}
+
 	public function __toString(){
 		return (string)$this->path;
+	}
+
+	protected function getMessagesFromIds(array $messagesIds){
+		$messages=[];
+
+		foreach($messagesIds as $messageId){
+			if(!array_key_exists($messageId,$this->fetchedMessages)){
+				$this->fetchedMessages[$messageId]=new Message($this,$messageId);
+			}
+
+			$messages[]=$this->fetchedMessages[$messageId];
+		}
+
+		return $messages;
 	}
 }

@@ -46,6 +46,8 @@ class Imap{
 			$this->reconnect($mailboxPath);
 
 			return;
+		}else if($this->resource!==null){
+			$this->topMailbox->clear();
 		}
 
 		if($mailboxPath===null){
@@ -64,6 +66,8 @@ class Imap{
 	}
 
 	public function disconnect(){
+		$this->topMailbox->clear();
+
 		$this->currentFullMailboxServerPath=null;
 
 		if($this->connectionIsAlive()){
@@ -151,6 +155,12 @@ class Imap{
 
 	public function getTopMailbox(){
 		return $this->topMailbox;
+	}
+
+	public function clearMessageCache(){
+		if($this->connectionIsAlive()){
+			imap_gc($this->resource,IMAP_GC_ELT|IMAP_GC_ENV|IMAP_GC_TEXTS);
+		}
 	}
 
 	protected function connectionIsAlive(){
