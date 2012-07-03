@@ -57,6 +57,61 @@ class Message{
 		return $headers;
 	}
 
+	public function getEnvelope($removeMessageId=true){
+		$headers=$this->getHeaders();
+
+		$envelope=['custom_headers'=>[]];
+
+		$copiedProperties=[
+			'remail',
+			'date',
+			'subject'
+		];
+
+		if(!$removeMessageId){
+			$copiedProperties[]='message_id';
+		}
+
+		foreach($copiedProperties as $propertyName){
+			if(property_exists($headers,$propertyName)){
+				$envelope[$propertyName]=$headers->$propertyName;
+			}
+		}
+
+		$copiedAddresses=[
+			'return_path',
+			'from',
+			'reply_to',
+			'in_reply_to',
+			'to',
+			'cc',
+			'bcc',
+		];
+
+		foreach($copiedAddresses as $propertyName){
+			if(!property_exists($headers,$propertyName)){
+				continue;
+			}
+
+			if(is_string($headers->$propertyName)){
+				$envelope[$propertyName]=$headers->$propertyName;
+
+				continue;
+			}
+
+			$envelope[$propertyName]=[];
+
+			foreach($headers->$propertyName as $mailAddress){
+				$personal=property_exists($mailAddress,'personal')?$mailAddress->personal:'';
+				$envelope[$propertyName][]=imap_rfc822_write_address($mailAddress->mailbox,$mailAddress->host,$personal);
+			}
+
+			$envelope[$propertyName]=implode(', ',$envelope[$propertyName]);
+		}
+
+		return $envelope;
+	}
+
 	public function getRawHeaders(){
 		$rawHeaders=imap_fetchheader($this->mailbox->getResource(),$this->id,FT_UID);
 
