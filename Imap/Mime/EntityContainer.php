@@ -73,8 +73,8 @@ class EntityContainer extends AbstractEntity implements EntityContainerInterface
 			$childrenToString[]=$child->toString();
 		}
 
-		if(array_key_exists('BOUNDARY',$this->typeParameters)){
-			$boundary=$this->typeParameters['BOUNDARY'];
+		if($this->hasTypeParameter('boundary')){
+			$boundary=$this->getTypeParameter('boundary');
 		}else{
 			$boundary=$this->findBoundaryForParts($childrenToString);
 		}
@@ -132,7 +132,9 @@ class EntityContainer extends AbstractEntity implements EntityContainerInterface
 	protected function getBodies($boundary){
 		$body=$this->getBodyWithoutContent();
 
+		unset($body['type.parameters']['boundary']);
 		$body['type.parameters']['BOUNDARY']=$boundary;
+		//make sure that BOUNDARY is written in upper case here.
 
 		return [
 			$body,

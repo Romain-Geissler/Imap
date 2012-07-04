@@ -49,6 +49,26 @@ abstract class AbstractEntity implements EntityInterface{
 		$this->typeParameters=$typeParameters;
 	}
 
+	public function hasTypeParameter($parameterName){
+		return array_key_exists($parameterName,$this->typeParameters);
+	}
+
+	public function getTypeParameter($parameterName){
+		if(!$this->hasTypeParameter($parameterName)){
+			throw new MimeException(sprintf('Type parameter "%s" is not set.'));
+		}
+
+		return $this->typeParameters[$parameterName];
+	}
+
+	public function setTypeParameter($parameterName,$value){
+		$this->typeParameters[$parameterName]=$value;
+	}
+
+	public function removeTypeParameter($parameterName){
+		unset($this->typeParameters[$parameterName]);
+	}
+
 	public function getDisposition(){
 		return $this->disposition;
 	}
@@ -63,6 +83,26 @@ abstract class AbstractEntity implements EntityInterface{
 
 	public function setDispositionParameters(array $dispositionParameters){
 		$this->dispositionParameters=$dispositionParameters;
+	}
+
+	public function hasDispositionParameter($parameterName){
+		return array_key_exists($parameterName,$this->dispositionParameters);
+	}
+
+	public function getDispositionParameter($parameterName){
+		if(!$this->hasDispositionParameter($parameterName)){
+			throw new MimeException(sprintf('Disposition parameter "%s" is not set.'));
+		}
+
+		return $this->dispositionParameters[$parameterName];
+	}
+
+	public function setDispositionParameter($parameterName,$value){
+		$this->dispositionParameters[$parameterName]=$value;
+	}
+
+	public function removeDispositionParameter($parameterName){
+		unset($this->dispositionParameters[$parameterName]);
 	}
 
 	public function getEncoding(){

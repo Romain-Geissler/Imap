@@ -13,30 +13,28 @@ class Attachment extends LeafEntity implements AttachmentInterface{
 	}
 
 	public function getFileName(){
-		$dispositionParameters=$this->getDispositionParameters();
-
-		if(array_key_exists('filename',$dispositionParameters)){
-			return basename($dispositionParameters['filename']);
-			//use basename here to avoid hand crafted mails with a name
-			//such has '../../../etc/shadow', resulting in a unexpected
-			//file overwrite. This can happen if the oponent knows in which
-			//directory you will save this attachment.
+		if($this->hasDispositionParameter('filename')){
+			return $this->getDispositionParameter('filename');
 		}else{
 			return null;
 		}
 	}
 
 	public function setFileName($fileName){
-		$dispositionParameters=$this->getDispositionParameters();
-
-		$dispositionParameters=array_merge($dispositionParameters,['filename'=>$fileName]);
-
-		$this->setDispositionParameters($dispositionParameters);
+		if($fileName===null){
+			$this->removeDispositionParameter('filename');
+		}else{
+			$this->setDispositionParameter('filename',$fileName);
+		}
 	}
 
 	public function toFile($path,$pathIsParentDirectoryPath=true){
 		if($pathIsParentDirectoryPath){
 			$path=$path.DIRECTORY_SEPARATOR.basename($this->getFileName());
+			//use basename here to avoid hand crafted mails with a name
+			//such has '../../../etc/shadow', resulting in a unexpected
+			//file overwrite. This can happen if the oponent knows in which
+			//directory you will save this attachment.
 		}
 
 		if(file_put_contents($path,$this->getContent())===false){

@@ -15,6 +15,14 @@ interface EntityInterface{
 
 	function setTypeParameters(array $typeParameters);
 
+	function hasTypeParameter($parameterName);
+
+	function getTypeParameter($parameterName);
+
+	function setTypeParameter($parameterName,$value);
+
+	function removeTypeParameter($parameterName);
+
 	function getDisposition();
 
 	function setDisposition($disposition);
@@ -22,6 +30,14 @@ interface EntityInterface{
 	function getDispositionParameters();
 
 	function setDispositionParameters(array $dispositionParameters);
+
+	function hasDispositionParameter($parameterName);
+
+	function getDispositionParameter($parameterName);
+
+	function setDispositionParameter($parameterName,$value);
+
+	function removeDispositionParameter($parameterName);
 
 	function getEncoding();
 

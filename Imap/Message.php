@@ -346,7 +346,7 @@ class Message implements MessageInterface{
 		$arrayParameters=[];
 
 		foreach($objectParameters as $objectParameter){
-			$arrayParameters[$objectParameter->attribute]=$objectParameter->value;
+			$arrayParameters[strtolower($objectParameter->attribute)]=$objectParameter->value;
 		}
 
 		return $arrayParameters;
