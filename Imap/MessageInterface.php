@@ -16,6 +16,8 @@ interface MessageInterface{
 
 	function getMessageNumber();
 
+	function getTopMimeEntity($fetchNow=false);
+
 	function getHeaders();
 
 	function getEnvelope($removeMessageId=true);
@@ -35,6 +37,10 @@ interface MessageInterface{
 	function copy(MailboxPathInterface $fullMailboxPath);
 
 	function flagsToString($flags);
+
+	function clear();
+
+	function fetchSectionBody($sectionName);
 
 	function __toString();
 }

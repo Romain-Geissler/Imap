@@ -262,6 +262,10 @@ class Mailbox implements MailboxInterface{
 	}
 
 	public function clearFetchedMessages(){
+		foreach($this->fetchedMessages as $fetchedMessage){
+			$fetchedMessage->clear();
+		}
+
 		$this->fetchedMessages=[];
 	}
 
