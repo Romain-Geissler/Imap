@@ -2,27 +2,20 @@
 
 namespace Imap;
 
-class Message{
-	const RECENT_FLAG=1;
-	const SEEN_FLAG=2;
-	const FLAGGED_FLAG=4;
-	const ANSWERED_FLAG=8;
-	const DELETED_FLAG=16;
-	const DRAFT_FLAG=32;
-
+class Message implements MessageInterface{
 	protected $mailbox;
 	protected $id;
 
 	protected static $flagVariableNames=[
-		self::RECENT_FLAG=>'Recent',
-		self::SEEN_FLAG=>'Seen',
-		self::FLAGGED_FLAG=>'Flagged',
-		self::ANSWERED_FLAG=>'Answered',
-		self::DELETED_FLAG=>'Deleted',
-		self::DRAFT_FLAG=>'Draft'
+		MessageInterface::RECENT_FLAG=>'Recent',
+		MessageInterface::SEEN_FLAG=>'Seen',
+		MessageInterface::FLAGGED_FLAG=>'Flagged',
+		MessageInterface::ANSWERED_FLAG=>'Answered',
+		MessageInterface::DELETED_FLAG=>'Deleted',
+		MessageInterface::DRAFT_FLAG=>'Draft'
 	];
 
-	public function __construct(Mailbox $mailbox,$id){
+	public function __construct(MailboxInterface $mailbox,$id){
 		$this->mailbox=$mailbox;
 		$this->id=$id;
 	}
@@ -147,21 +140,21 @@ class Message{
 
 	public function setFlags($flags,$eraseOthers=false){
 		if($eraseOthers){
-			$oldFlags=$this->getFlags()&(~static::RECENT_FLAG);
+			$oldFlags=$this->getFlags()&(~MessageInterface::RECENT_FLAG);
 
 			$differentFlags=$oldFlags^$flags;
 			$clearedFlags=$differentFlags&$oldFlags;
 			$flags&=$differentFlags;
 
 			if($clearedFlags!=0){
-				if(!imap_clearflag_full($this->mailbox->getResource(),$this->id,static::flagsToString($clearedFlags),ST_UID)){
+				if(!imap_clearflag_full($this->mailbox->getResource(),$this->id,$this->flagsToString($clearedFlags),ST_UID)){
 					throw new ImapException(sprintf('Failed to clear flags for message "%s" in mailbox "%s"',$this,$this->mailbox));
 				}
 			}
 		}
 
 		if($flags!=0){
-			if(!imap_setflag_full($this->mailbox->getResource(),$this->id,static::flagsToString($flags),ST_UID)){
+			if(!imap_setflag_full($this->mailbox->getResource(),$this->id,$this->flagsToString($flags),ST_UID)){
 				throw new ImapException(sprintf('Failed to set flags for message "%s" in mailbox "%s"',$this,$this->mailbox));
 			}
 		}
@@ -177,7 +170,7 @@ class Message{
 		$this->mailbox->notifyDeletedMessage($this->id);
 	}
 
-	public function move(MailboxPath $fullMailboxPath){
+	public function move(MailboxPathInterface $fullMailboxPath){
 		if($fullMailboxPath->equals($this->mailbox->getPath())){
 			return;
 		}
@@ -192,13 +185,15 @@ class Message{
 			throw new ImapException(sprintf('Failed to move message "%s" from "%s" to "%s"',$this,$this->mailbox,$newMailbox));
 		}
 
-		$this->mailbox->notifyMovedMessage($newMailbox,$this->id,$newId);
+		$this->mailbox->notifyMovedOutMessage($this->id);
 
 		$this->id=$newId;
 		$this->mailbox=$newMailbox;
+
+		$this->mailbox->notifyMovedInMessage($this);
 	}
 
-	public function copy(MailboxPath $fullMailboxPath){
+	public function copy(MailboxPathInterface $fullMailboxPath){
 		if($fullMailboxPath->equals($this->mailbox->getPath())){
 			return;
 		}
@@ -212,11 +207,13 @@ class Message{
 			throw new ImapException(sprintf('Failed to copy message "%s" from "%s" to "%s"',$this,$this->mailbox,$copyMailbox));
 		}
 
-		return $copyMailbox->notifyCopiedMessage($copyId);
+		$copiedMessage=$this->mailbox->getImap()->getFactory()->createMessage($copyMailbox,$copyId);
+
+		return $copyMailbox->notifyCopiedMessage($copiedMessage);
 	}
 
-	public static function flagsToString($flags){
-		if($flags&static::RECENT_FLAG){
+	public function flagsToString($flags){
+		if($flags&MessageInterface::RECENT_FLAG){
 			throw new ImapException('The imap protocol won\'t allow you to set the recent flag.',false);
 		}
 

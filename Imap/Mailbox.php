@@ -2,24 +2,20 @@
 
 namespace Imap;
 
-class Mailbox{
-	const ASCENDING_SORT=0;
-	const DESCENDING_SORT=1;
-	const ALL_MESSAGES_CRITERIA='ALL';
-
+class Mailbox implements MailboxInterface{
 	protected $imap;
 	protected $path;
 	protected $fetchedMailboxes;
 	protected $fetchedMessages;
 
-	public function __construct(Imap $imap,Mailbox $parent=null,$name=null){
+	public function __construct(ImapInterface $imap,MailboxInterface $parent=null,$name=null){
 		$this->imap=$imap;
 		$this->parent=$parent;
 
 		if($this->parent===null){
 			$this->path=$this->imap->getPath();
 		}else{
-			$this->path=$this->parent->path->getNameAppended($name);
+			$this->path=$this->parent->getPath()->getNameAppended($name);
 		}
 
 		$this->fetchedMailboxes=[];
@@ -42,7 +38,7 @@ class Mailbox{
 		return $this->path->getLastName();
 	}
 
-	public function hasMailbox(MailboxPath $localMailboxPath){
+	public function hasMailbox(MailboxPathInterface $localMailboxPath){
 		$fullMailboxPath=$this->path->getAppended($localMailboxPath);
 		$escapedMailboxPath=$fullMailboxPath->escape();
 
@@ -68,7 +64,7 @@ class Mailbox{
 		}
 	}
 
-	public function createMailbox(MailboxPath $localMailboxPath){
+	public function createMailbox(MailboxPathInterface $localMailboxPath){
 		$fullMailboxPath=$this->path->getAppended($localMailboxPath);
 		$fullMailboxServerPath=$this->imap->computeFullMailboxServerPath($fullMailboxPath);
 
@@ -77,7 +73,7 @@ class Mailbox{
 		}
 	}
 
-	public function getMailbox(MailboxPath $localMailboxPath,$checkExistence=true){
+	public function getMailbox(MailboxPathInterface $localMailboxPath,$checkExistence=true){
 		if(!$localMailboxPath->hasName()){
 			return $this;
 		}
@@ -91,7 +87,7 @@ class Mailbox{
 				$this->createMailbox($childrenLocalMailboxPath);
 			}
 
-			$this->fetchedMailboxes[$firstName]=new static($this->imap,$this,$firstName);
+			$this->fetchedMailboxes[$firstName]=$this->imap->getFactory()->createMailbox($this->imap,$this,$firstName);
 		}
 
 		if($localMailboxPath->hasSubName()){
@@ -121,8 +117,14 @@ class Mailbox{
 				//check for unescapable wildcards: there may be more than one
 				//matching result, and these may not be the ones we are looking for.
 
-				if(!$this->path->isAncestorOf($fullMailboxPath)){
-					continue;
+				if($deepLookup){
+					if(!$this->path->isAncestorOf($fullMailboxPath)){
+						continue;
+					}
+				}else{
+					if(!$this->path->isDirectAncestorOf($fullMailboxPath)){
+						continue;
+					}
 				}
 			}
 
@@ -153,10 +155,14 @@ class Mailbox{
 
 		$this->clear();
 
-		unset($this->parent->fetchedMailboxes[$this->getName()]);
+		$this->parent->notifyDeletedMailbox($this->getName());
 	}
 
-	public function move(MailboxPath $fullMailboxPath){
+	public function notifyDeletedMailbox($mailboxName){
+		unset($this->fetchedMailboxes[$mailboxName]);
+	}
+
+	public function move(MailboxPathInterface $fullMailboxPath){
 		if($fullMailboxPath->equals($this->path)){
 			return;
 		}
@@ -169,14 +175,26 @@ class Mailbox{
 		}
 
 		foreach($this->getFetchedMailboxes(true) as $fetchedMailbox){
-			$fetchedMailbox->path=$fullMailboxPath->getAppended($fetchedMailbox->path->getDescentDifferentFrom($this->path));
+			$fetchedMailbox->notifyMovedPath($fullMailboxPath->getAppended($fetchedMailbox->getPath()->getDescentDifferentFrom($this->path)));
 		}
 
-		unset($this->parent->fetchedMailboxes[$this->getName()]);
+		$this->parent->notifyMovedOutMailbox($this->getName());
 		$this->path=$fullMailboxPath;
 
 		$this->parent=$this->imap->getTopMailbox()->getMailbox($fullMailboxPath,false);
-		$this->parent->fetchedMailboxes[$this->getName()]=$this;
+		$this->parent->notifyMovedInMailbox($this);
+	}
+
+	public function notifyMovedPath(MailboxPathInterface $newFullMailboxPath){
+		$this->path=$newFullMailboxPath;
+	}
+
+	public function notifyMovedOutMailbox($mailboxName){
+		unset($this->fetchedMailboxes[$mailboxName]);
+	}
+
+	public function notifyMovedInMailbox(MailboxInterface $mailbox){
+		$this->fetchedMailboxes[$mailbox->getName()]=$mailbox;
 	}
 
 	public function getFetchedMailboxes($deepLookup=false){
@@ -205,7 +223,7 @@ class Mailbox{
 		$this->fetchedMailboxes=[];
 	}
 
-	public function getMessages($criterias=self::ALL_MESSAGES_CRITERIA){
+	public function getMessages($criterias=MailboxInterface::ALL_MESSAGES_CRITERIA){
 		imap_errors();
 		$messagesIds=imap_search($this->getResource(),$criterias,SE_UID);
 
@@ -220,7 +238,7 @@ class Mailbox{
 		return $this->getMessagesFromIds($messagesIds);
 	}
 
-	public function getSortedMessages($sortCriteria,$sortOrder=self::ASCENDING_SORT,$criterias=self::ALL_MESSAGES_CRITERIA){
+	public function getSortedMessages($sortCriteria,$sortOrder=MailboxInterface::ASCENDING_SORT,$criterias=MailboxInterface::ALL_MESSAGES_CRITERIA){
 		imap_errors();
 		$messagesIds=imap_sort($this->getResource(),$sortCriteria,$sortOrder,SE_UID|SE_NOPREFETCH,$criterias);
 
@@ -228,7 +246,7 @@ class Mailbox{
 			if(imap_last_error()===false){
 				return [];
 			}else{
-				throw new ImapException(sprintf('Failed to sort message by "%s" (%s) matching criterias "%s" in mailbox "%s"',$sortCriteria,$sortOrder==static::ASCENDING_SORT?'ASC':'DESC',$criterias,$this));
+				throw new ImapException(sprintf('Failed to sort message by "%s" (%s) matching criterias "%s" in mailbox "%s"',$sortCriteria,$sortOrder==MailboxInterface::ASCENDING_SORT?'ASC':'DESC',$criterias,$this));
 			}
 		}
 
@@ -256,18 +274,20 @@ class Mailbox{
 		unset($this->fetchedMessages[$messageId]);
 	}
 
-	public function notifyMovedMessage(Mailbox $newMailbox,$oldMessageId,$newMessageId){
-		$newMailbox->fetchedMessages[$newMessageId]=$this->fetchedMessages[$oldMessageId];
-
+	public function notifyMovedOutMessage($oldMessageId){
 		unset($this->fetchedMessages[$oldMessageId]);
 	}
 
-	public function notifyCopiedMessage($newMessageId){
-		return $this->fetchedMessages[$newMessageId]=new Message($this,$newMessageId);
+	public function notifyMovedInMessage(MessageInterface $message){
+		$this->fetchedMessages[$message->getId()]=$message;
 	}
 
-	public function notifyAddedMessage($newMessageId){
-		return $this->fetchedMessages[$newMessageId]=new Message($this,$newMessageId);
+	public function notifyCopiedMessage(MessageInterface $message){
+		return $this->fetchedMessages[$message->getId()]=$message;
+	}
+
+	public function notifyAddedMessage(MessageInterface $message){
+		return $this->fetchedMessages[$message->getId()]=$message;
 	}
 
 	public function getNextMessageId(){
@@ -288,12 +308,13 @@ class Mailbox{
 
 	public function addMessage($stringMessage,$flags=0){
 		$newMessageId=$this->getNextMessageId();
+		$message=$this->imap->getFactory()->createMessage($this,$newMessageId);
 
-		if(!imap_append($this->getResource(false),$this->imap->computeFullMailboxServerPath($this->path),$stringMessage,Message::flagsToString($flags))){
+		if(!imap_append($this->getResource(false),$this->imap->computeFullMailboxServerPath($this->path),$stringMessage,$message->flagsToString($flags))){
 			throw new ImapException(sprintf('Failed to add new message in mailbox "%s"',$this));
 		}
 
-		return $this->notifyAddedMessage($newMessageId);
+		return $this->notifyAddedMessage($message);
 	}
 
 	public function __toString(){
@@ -302,10 +323,11 @@ class Mailbox{
 
 	protected function getMessagesFromIds(array $messagesIds){
 		$messages=[];
+		$factory=$this->imap->getFactory();
 
 		foreach($messagesIds as $messageId){
 			if(!array_key_exists($messageId,$this->fetchedMessages)){
-				$this->fetchedMessages[$messageId]=new Message($this,$messageId);
+				$this->fetchedMessages[$messageId]=$factory->createMessage($this,$messageId);
 			}
 
 			$messages[]=$this->fetchedMessages[$messageId];

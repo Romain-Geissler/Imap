@@ -2,7 +2,7 @@
 
 namespace Imap;
 
-class Imap{
+class Imap implements ImapInterface{
 	const DEFAULT_PORT=143;
 	const DEFAULT_MAX_RETRY_COUNT=3;
 	const DEFAULT_TOP_MAILBOX_NAME='INBOX';
@@ -21,7 +21,7 @@ class Imap{
 	protected $delimiterCharacter;
 	protected $topMailbox;
 
-	public function __construct($host,$port=self::DEFAULT_PORT,$useSSL=true,$userName,$password,$maxRetryCount=self::DEFAULT_MAX_RETRY_COUNT,$topMailboxName=self::DEFAULT_TOP_MAILBOX_NAME){
+	public function __construct($host,$port=self::DEFAULT_PORT,$useSSL=true,$userName,$password,$maxRetryCount=self::DEFAULT_MAX_RETRY_COUNT,$topMailboxName=self::DEFAULT_TOP_MAILBOX_NAME,ImapFactoryInterface $factory=null){
 		$this->host=$host;
 		$this->port=$port;
 		$this->useSSL=$useSSL;
@@ -29,19 +29,20 @@ class Imap{
 		$this->password=$password;
 		$this->maxRetryCount=$this->maxRetryCount;
 		$this->topMailboxName=$topMailboxName;
+		$this->factory=$factory===null?new ImapFactory():$factory;
 
 		$this->resource=null;
 		$this->serverSpecification=sprintf('{%s:%s%s}',$this->host,$this->port,$this->useSSL?'/ssl/novalidate-cert':'');
 		$this->currentFullMailboxServerPath=null;
 		$this->delimiterCharacter=null;
-		$this->topMailbox=new Mailbox($this);
+		$this->topMailbox=$this->factory->createMailBox($this);
 	}
 
 	public function __destruct(){
 		$this->disconnect();
 	}
 
-	public function connect(MailboxPath $mailboxPath=null){
+	public function connect(MailboxPathInterface $mailboxPath=null){
 		if($this->connectionIsAlive()){
 			$this->reconnect($mailboxPath);
 
@@ -86,15 +87,19 @@ class Imap{
 	}
 
 	public function getPath($namePath=null){
-		return new MailboxPath($this,$namePath);
+		return $this->factory->createPath($this,$namePath);
 	}
 
-	public function computeFullMailboxServerPath(MailboxPath $mailboxPath){
+	public function computeFullMailboxServerPath(MailboxPathInterface $mailboxPath){
 		return $this->serverSpecification.$mailboxPath->escape();
 	}
 
 	public function computeFullMailboxPath($fullMailboxServerPath){
-		return MailboxPath::unescape($this,substr($fullMailboxServerPath,strlen($this->serverSpecification)));
+		$path=$this->getPath();
+
+		$path->unescape(substr($fullMailboxServerPath,strlen($this->serverSpecification)));
+
+		return $path;
 	}
 
 	public function getHost(){
@@ -125,7 +130,15 @@ class Imap{
 		return $this->topMailboxName;
 	}
 
-	public function getResource(MailboxPath $mailboxPath=null){
+	public function getFactory(){
+		return $this->factory;
+	}
+
+	public function setFactory(ImapFactoryInterface $factory){
+		$this->factory=$factory;
+	}
+
+	public function getResource(MailboxPathInterface $mailboxPath=null){
 		$this->connect($mailboxPath);
 
 		return $this->resource;
@@ -168,7 +181,7 @@ class Imap{
 	}
 
 	//call this only if the previous connection is still alive
-	protected function reconnect(MailboxPath $mailboxPath=null){
+	protected function reconnect(MailboxPathInterface $mailboxPath=null){
 		if($mailboxPath===null){
 			return;
 		}

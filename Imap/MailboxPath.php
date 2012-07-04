@@ -2,12 +2,12 @@
 
 namespace Imap;
 
-class MailboxPath{
+class MailboxPath implements MailboxPathInterface{
 	protected $imap;
 	protected $namePath;
 	protected $cachedEscapedNamePath;
 
-	public function __construct(Imap $imap,$namePath=null){
+	public function __construct(ImapInterface $imap,$namePath=null){
 		$this->imap=$imap;
 
 		$this->move($namePath);
@@ -19,6 +19,8 @@ class MailboxPath{
 			$this->cachedEscapedNamePath=$namePath->cachedEscapedNamePath;
 
 			return;
+		}else if($namePath instanceof MailboxPathInterface){
+			$namePath=$namePath->getNamePath();
 		}
 
 		if($namePath===null){
@@ -102,54 +104,62 @@ class MailboxPath{
 		return count($this->namePath)>1;
 	}
 
-	public function getCommonAncestor(MailboxPath $path){
-		$ancestor=new static($this->imap);
-		$max=min(count($this->namePath),count($path->namePath));
+	public function getCommonAncestor(MailboxPathInterface $comparedPath){
+		$ancestorNamePath=[];
+		$comparedNamePath=$comparedPath->getNamePath();
+		$max=min(count($this->namePath),count($comparedNamePath));
 
 		for($i=0;$i<$max;++$i){
-			if($this->namePath[$i]!=$path->namePath[$i]){
+			if($this->namePath[$i]!=$comparedNamePath[$i]){
 				break;
 			}
 
-			$ancestor->namePath[]=$this->namePath[$i];
+			$ancestorNamePath[]=$this->namePath[$i];
 		}
 
-		return $ancestor;
+		return $this->imap->getFactory()->createPath($this->imap,$ancestorNamePath);
 	}
 
-	public function getDescentDifferentFrom(MailboxPath $path){
-		$descent=new static($this->imap);
-		$count=count($this->namePath);
-		$max=min($count,count($path->namePath));
+	public function getDescentDifferentFrom(MailboxPathInterface $comparedPath){
+		$comparedNamePath=$comparedPath->getNamePath();
+		$max=min(count($this->namePath),count($comparedNamePath));
 
 		for($i=0;$i<$max;++$i){
-			if($this->namePath[$i]!=$path->namePath[$i]){
+			if($this->namePath[$i]!=$comparedNamePathh[$i]){
 				break;
 			}
 		}
 
-		$descent->namePath=array_slice($this->namePath,$i);
+		$descentNamePath=array_slice($this->namePath,$i);
 
-		return $descent;
+		return $this->imap->getFactory()->createPath($this->imap,$descentNamePath);
 	}
 
-	public function isAncestorOf(MailboxPath $path,$strict=true){
+	public function isAncestorOf(MailboxPathInterface $path,$strict=true){
 		return $this->equals($this->getCommonAncestor($path))&&(!$strict||!$this->equals($path));
 	}
 
-	public function isDescendantOf(MailboxPath $path,$strict=true){
+	public function isDirectAncestorOf(MailboxPathInterface $path){
+		return $path->hasName()&&$this->namePath==array_slice($path->getNamePath(),0,-1);
+	}
+
+	public function isDescendantOf(MailboxPathInterface $path,$strict=true){
 		return $path->isAncestorOf($this,$strict);
 	}
 
-	public function append(MailboxPath $path){
-		foreach($path->namePath as $name){
+	public function isDirectDescendantOf(MailboxPathInterface $path){
+		return $path->isDirectAncestorOf($this);
+	}
+
+	public function append(MailboxPathInterface $path){
+		foreach($path->getNamePath() as $name){
 			$this->namePath[]=$name;
 		}
 
 		$this->clearCache();
 	}
 
-	public function getAppended(MailboxPath $path){
+	public function getAppended(MailboxPathInterface $path){
 		$appended=clone $this;
 
 		$appended->append($path);
@@ -157,9 +167,9 @@ class MailboxPath{
 		return $appended;
 	}
 
-	public function prepend(MailboxPath $path){
+	public function prepend(MailboxPathInterface $path){
 		$oldNamePath=$this->namePath;
-		$this->namePath=$path->namePath;
+		$this->namePath=$path->getNamePath();
 
 		foreach($oldNamePath as $name){
 			$this->namePath[]=$name;
@@ -168,7 +178,7 @@ class MailboxPath{
 		$this->clearCache();
 	}
 
-	public function getPrepended(MailboxPath $path){
+	public function getPrepended(MailboxPathInterface $path){
 		$prepended=clone $this;
 
 		$prepended->prepend($path);
@@ -248,7 +258,7 @@ class MailboxPath{
 
 			if(!$this->hasName()){
 				//special case when the delimiter has not been computed yet
-				$this->cachedEscapedNamePath=static::escapeName($this->imap->getTopMailboxName());
+				$this->cachedEscapedNamePath=$this->escapeName($this->imap->getTopMailboxName());
 			}else{
 				$namePath=$this->namePath;
 
@@ -257,7 +267,7 @@ class MailboxPath{
 				}
 
 				foreach($namePath as &$name){
-					$name=static::escapeName($name);
+					$name=$this->escapeName($name);
 				}
 
 				$this->cachedEscapedNamePath=implode($this->imap->getDelimiterCharacter(),$namePath);
@@ -267,33 +277,16 @@ class MailboxPath{
 		return $this->cachedEscapedNamePath;
 	}
 
-	//names are of course UTF-8 encoded
-	public static function escapeName($name){
-		//don't use imap_utf7_encode(utf8_decode($name)) as ISO-8859-1 can't
-		//be used as an intermediate charset (cannot handle all characters)
-		return mb_convert_encoding($name,'UTF7-IMAP','UTF-8');
-	}
+	public function unescape($escapedPath){
+		$this->namePath=explode($imap->getDelimiterCharacter(),$escapedPath);
 
-	public static function unescape(Imap $imap,$escapedPath){
-		$unescaped=new static($imap);
-
-		$unescaped->namePath=explode($imap->getDelimiterCharacter(),$escapedPath);
-
-		if($imap->getTopMailboxName()!=''){
-			array_shift($unescaped->namePath);
+		if($this->imap->getTopMailboxName()!=''){
+			array_shift($this->namePath);
 		}
 
-		foreach($unescaped->namePath as &$name){
-			$name=static::unescapeName($name);
+		foreach($this->namePath as &$name){
+			$name=$this->unescapeName($name);
 		}
-
-		return $unescaped;
-	}
-
-	public static function unescapeName($name){
-		//don't use imap_utf8_encode(imap_utf7_decode($name)) as ISO-8859-1 can't
-		//be used as an intermediate charset (cannot handle all characters)
-		return mb_convert_encoding($name,'UTF-8','UTF7-IMAP');
 	}
 
 	public function escapeForChildrenLookup($deepLookup=false){
@@ -314,7 +307,7 @@ class MailboxPath{
 		}
 	}
 
-	public function equals(MailboxPath $path){
+	public function equals(MailboxPathInterface $path){
 		return $this->escape()==$path->escape();
 	}
 
@@ -336,5 +329,18 @@ class MailboxPath{
 
 	protected function clearCache(){
 		$this->cachedEscapedNamePath=null;
+	}
+
+	//names are of course UTF-8 encoded
+	protected function escapeName($name){
+		//don't use imap_utf7_encode(utf8_decode($name)) as ISO-8859-1 can't
+		//be used as an intermediate charset (cannot handle all characters)
+		return mb_convert_encoding($name,'UTF7-IMAP','UTF-8');
+	}
+
+	protected function unescapeName($name){
+		//don't use imap_utf8_encode(imap_utf7_decode($name)) as ISO-8859-1 can't
+		//be used as an intermediate charset (cannot handle all characters)
+		return mb_convert_encoding($name,'UTF-8','UTF7-IMAP');
 	}
 }
