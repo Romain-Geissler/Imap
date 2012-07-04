@@ -1,9 +1,12 @@
 <?php
 
-namespace Imap\Mime;
+namespace Imap\Mime\Attachment;
 
-class Attachment extends Part{
-	public function __construct($content,$fileName,$type=TYPEAPPLICATION,$subType=null,array $typeParameters=[],$disposition='attachment',array $dispositionParameters=[],$encoding=ENCBINARY,$charset=null,$id=null,$description=null){
+use Imap\Mime\LeafEntity;
+use Imap\Mime\MimeException;
+
+class Attachment extends LeafEntity implements AttachmentInterface{
+	public function __construct($content,$fileName,$type=TYPEAPPLICATION,$subType=null,array $typeParameters=[],$disposition=AttachmentInterface::ATTACHMENT_DISPOSITION,array $dispositionParameters=[],$encoding=ENCBINARY,$charset=null,$id=null,$description=null){
 		parent::__construct($content,$type,$subType,$typeParameters,$disposition,$dispositionParameters,$encoding,$charset,$id,$description);
 
 		$this->setFileName($fileName);
@@ -29,20 +32,6 @@ class Attachment extends Part{
 		$dispositionParameters=array_merge($dispositionParameters,['filename'=>$fileName]);
 
 		$this->setDispositionParameters($dispositionParameters);
-	}
-
-	public static function fromFile($filePath,$fileName=null,$type=TYPEAPPLICATION,$subType=null,array $typeParameters=[],$disposition='attachment',array $dispositionParameters=[],$encoding=ENCBINARY,$charset=null,$id=null,$description=null){
-		if($fileName===null){
-			$fileName=basename($filePath);
-		}
-
-		$content=file_get_contents($filePath);
-
-		if($content===false){
-			throw new MimeException(sprintf('Failed to get "%s" content.',$filePath));
-		}
-
-		return new static(file_get_contents($filePath),$fileName,$type,$subType,$typeParameters,$disposition,$dispositionParameters,$encoding,$charset,$id,$description);
 	}
 
 	public function toFile($path,$pathIsParentDirectoryPath=true){

@@ -2,7 +2,7 @@
 
 namespace Imap\Mime;
 
-abstract class AbstractEntity implements Entity{
+abstract class AbstractEntity implements EntityInterface{
 	protected $type;
 	protected $encoding;
 	protected $charset;
@@ -97,7 +97,17 @@ abstract class AbstractEntity implements Entity{
 		$this->description=$description;
 	}
 
-	public function getBodyWithoutContent(){
+	abstract public function isFetched();
+
+	abstract public function fetch();
+
+	abstract public function toString(array $envelope=[]);
+
+	public function __toString(){
+		return $this->toString();
+	}
+
+	protected function getBodyWithoutContent(){
 		$body=[
 			'type'=>$this->type,
 			'type.parameters'=>$this->typeParameters,
@@ -129,11 +139,5 @@ abstract class AbstractEntity implements Entity{
 		}
 
 		return $body;
-	}
-
-	abstract public function toString(array $envelope=[]);
-
-	public function __toString(){
-		return $this->toString();
 	}
 }
