@@ -5,7 +5,6 @@ namespace Imap\Mime;
 abstract class AbstractEntity implements EntityInterface{
 	protected $type;
 	protected $encoding;
-	protected $charset;
 	protected $typeParameters;
 	protected $subType;
 	protected $id;
@@ -114,11 +113,19 @@ abstract class AbstractEntity implements EntityInterface{
 	}
 
 	public function getCharset(){
-		return $this->charset;
+		if($this->hasTypeParameter('charset')){
+			return $this->getTypeParameter('charset');
+		}else{
+			return null;
+		}
 	}
 
 	public function setCharset($charset){
-		$this->charset=$charset;
+		if($charset===null){
+			$this->removeTypeParameter('charset');
+		}else{
+			$this->setTypeParameter('charset',$charset);
+		}
 	}
 
 	public function getId(){
@@ -141,6 +148,53 @@ abstract class AbstractEntity implements EntityInterface{
 
 	abstract public function fetch();
 
+	abstract public function getTextEntities($fetchNow=false);
+
+	public function getText(){
+		$textEntities=$this->getTextEntities(true);
+
+		$text='';
+
+		foreach($textEntities as $textEntity){
+			$charset=$textEntity->getCharset();
+
+			if($charset===null){
+				$charset='US-ASCII';
+			}
+
+			$text.=mb_convert_encoding($textEntity->getContent(),'UTF-8',$charset);
+		}
+
+		return $text;
+	}
+
+	public function hasAttachments($name=null){
+		$attachments=$this->getAttachments($name,false);
+
+		return count($attachments)>0;
+	}
+
+	abstract public function getAttachments($name=null,$fetchNow=false);
+
+	public function getSingleAttachmentNamed($name,$fetchNow=false){
+		$attachments=$this->getAttachments($name,false);
+		$count=count($attachments);
+
+		if($count==0){
+			throw new MimeException(sprintf('No attachment named "%s" found.',$name));
+		}else if($count>1){
+			throw new MimeException(sprintf('Attachment name "%s" is ambigous, there are %s attachments named like this.',$name,$count));
+		}
+
+		$attachment=$attachments[0];
+
+		if($fetchNow){
+			$attachment->fetch();
+		}
+
+		return $attachment;
+	}
+
 	abstract public function toString(array $envelope=[]);
 
 	public function __toString(){
@@ -160,10 +214,6 @@ abstract class AbstractEntity implements EntityInterface{
 
 		if($this->encoding!==null){
 			$body['encoding']=$this->encoding;
-		}
-
-		if($this->charset!==null){
-			$body['charset']=$this->charset;
 		}
 
 		if($this->id!==null){

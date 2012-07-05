@@ -59,6 +59,30 @@ class EntityContainer extends AbstractEntity implements EntityContainerInterface
 		}
 	}
 
+	public function getTextEntities($fetchNow=false){
+		$textEntities=[];
+
+		foreach($this->children as $child){
+			foreach($child->getTextEntities($fetchNow) as $childTextEntity){
+				$textEntities[]=$childTextEntity;
+			}
+		}
+
+		return $textEntities;
+	}
+
+	public function getAttachments($name=null,$fetchNow=false){
+		$attachments=[];
+
+		foreach($this->children as $child){
+			foreach($child->getAttachments($name,$fetchNow) as $childAttachments){
+				$attachments[]=$childAttachments;
+			}
+		}
+
+		return $attachments;
+	}
+
 	public function toString(array $envelope=[]){
 		//sadly we can't fully use imap_mail_compose here because support for
 		//multipart sections is partial. One can have one multipart section

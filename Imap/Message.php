@@ -283,6 +283,26 @@ class Message implements MessageInterface{
 		return $content;
 	}
 
+	public function getTextEntities($fetchNow=false){
+		return $this->getTopMimeEntity(false)->getTextEntities($fetchNow);
+	}
+
+	public function getText(){
+		return $this->getTopMimeEntity(false)->getText();
+	}
+
+	public function hasAttachments($name=null){
+		return $this->getTopMimeEntity(false)->hasAttachments($name);
+	}
+
+	public function getAttachments($name=null,$fetchNow=false){
+		return $this->getTopMimeEntity(false)->getAttachments($name,$fetchNow);
+	}
+
+	public function getSingleAttachmentNamed($name,$fetchNow=false){
+		return $this->getTopMimeEntity(false)->getSingleAttachmentNamed($name,$fetchNow);
+	}
+
 	public function __toString(){
 		return (string)$this->id;
 	}

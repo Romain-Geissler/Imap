@@ -59,6 +59,17 @@ interface EntityInterface{
 
 	function fetch();
 
+	function getTextEntities($fetchNow=false);
+
+	function getText();
+	//return an UTF8 encoded string, no matter the original charset was.
+
+	function hasAttachments($name=null);
+
+	function getAttachments($name=null,$fetchNow=false);
+
+	function getSingleAttachmentNamed($name,$fetchNow=false);
+
 	function toString(array $envelope=[]);
 
 	function __toString();

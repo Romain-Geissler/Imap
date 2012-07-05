@@ -2,6 +2,8 @@
 
 namespace Imap\Mime;
 
+use Imap\Mime\Attachment\AttachmentInterface;
+
 class LeafEntity extends AbstractEntity implements LeafEntityInterface{
 	protected $content;
 
@@ -31,6 +33,30 @@ class LeafEntity extends AbstractEntity implements LeafEntityInterface{
 		}
 
 		throw new MimeException('Can\'t fetch a simple LeafEntity. Please extend this class to provide some fetch logic.');
+	}
+
+	public function getTextEntities($fetchNow=false){
+		if($this->type==TYPETEXT&&!$this instanceof AttachmentInterface){
+			if($fetchNow){
+				$this->fetch();
+			}
+
+			return [$this];
+		}else{
+			return [];
+		}
+	}
+
+	public function getAttachments($name=null,$fetchNow=false){
+		if($this instanceof AttachmentInterface&&($name===null||$name==$this->getFileName())){
+			if($fetchNow){
+				$this->fetch();
+			}
+
+			return [$this];
+		}else{
+			return [];
+		}
 	}
 
 	public function toString(array $envelope=[]){
