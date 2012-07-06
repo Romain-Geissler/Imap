@@ -3,6 +3,9 @@
 namespace Imap;
 
 use Imap\Mime\Attachment\AttachmentInterface;
+use Imap\Mime\Utils;
+use Imap\Mime\SMimeSignedEntityInterface;
+use Imap\Mime\SMimeEncryptedEntityInterface;
 
 class Message implements MessageInterface{
 	protected $mailbox;
@@ -248,6 +251,30 @@ class Message implements MessageInterface{
 		return implode(' ',$stringFlagArray);
 	}
 
+	public function fetchRawHeaders($sectionName=null){
+		if($sectionName===null){
+			return Utils::filterMimeHeaders($this->getRawHeaders(),true);
+		}else{
+			if(($rawHeaders=imap_fetchmime($this->mailbox->getResource(),$this->id,$sectionName,FT_UID))===false){
+				throw new ImapException(sprintf('Failed to fetch headers for section "%s" in message "%s" in mailbox "%s"',$sectionName,$this,$this->mailbox));
+			}
+
+			return Utils::filterMimeHeaders($rawHeaders,true);
+		}
+	}
+
+	public function fetchRawSectionBody($sectionName=null){
+		if($sectionName===null){
+			return $this->getRawBody();
+		}else{
+			if(($rawBody=imap_fetchbody($this->mailbox->getResource(),$this->id,$sectionName,FT_UID))===false){
+				throw new ImapException(sprintf('Failed to fetch body for section "%s" in message "%s" in mailbox "%s"',$sectionName,$this,$this->mailbox));
+			}
+
+			return $rawBody;
+		}
+	}
+
 	public function fetchSectionBody($sectionName){
 		$resource=$this->mailbox->getResource();
 
@@ -255,9 +282,7 @@ class Message implements MessageInterface{
 			throw new ImapException(sprintf('Failed to fetch structure for section "%s" in message "%s" in mailbox "%s"',$sectionName,$this,$this->mailbox));
 		}
 
-		if(($rawContent=imap_fetchbody($resource,$this->id,$sectionName,FT_UID))===false){
-			throw new ImapException(sprintf('Failed to fetch body for section "%s" in message "%s" in mailbox "%s"',$sectionName,$this,$this->mailbox));
-		}
+		$rawContent=$this->fetchRawSectionBody($sectionName);
 
 		switch($structure->encoding){
 			case ENC7BIT:
@@ -281,6 +306,10 @@ class Message implements MessageInterface{
 		}
 
 		return $content;
+	}
+
+	public function fetchRawSection($sectionName=null){
+		return $this->fetchRawHeaders($sectionName).$this->fetchRawSectionBody($sectionName);
 	}
 
 	public function getTextEntities($fetchNow=false){
@@ -308,50 +337,77 @@ class Message implements MessageInterface{
 	}
 
 	protected function structureToMimeEntity($structure,$fetchNow,$sectionName=null){
-		$entityHeadersArguments=$this->getEntityHeaderArguments($structure);
-
 		if($structure->type==TYPEMULTIPART){
-			$children=[];
-			$counter=1;
-
-			if($sectionName===null){
-				$sectionNamePattern='%2$s';
-			}else{
-				$sectionNamePattern='%s.%s';
-			}
-
-			foreach($structure->parts as $partStructure){
-				$children[]=$this->structureToMimeEntity($partStructure,$fetchNow,sprintf($sectionNamePattern,$sectionName,$counter++));
-			}
-
-			$arguments=$entityHeadersArguments;
-			array_unshift($arguments,$children,$fetchNow);
-
-			return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createEntityContainer'],$arguments);
+			return $this->structureToMimeEntityContainer($structure,$fetchNow,$sectionName);
 		}else{
-			if($sectionName===null){
-				$sectionName='1';
+			return $this->structureToLeafMimeEntity($structure,$fetchNow,$sectionName);
+		}
+	}
+
+	protected function structureToMimeEntityContainer($structure,$fetchNow,$sectionName=null){
+		$arguments=$this->getEntityHeaderArguments($structure);
+		$children=[];
+		$counter=1;
+
+		if($sectionName===null){
+			$sectionNamePattern='%2$s';
+		}else{
+			$sectionNamePattern='%s.%s';
+		}
+
+		foreach($structure->parts as $partStructure){
+			$children[]=$this->structureToMimeEntity($partStructure,$fetchNow,sprintf($sectionNamePattern,$sectionName,$counter++));
+		}
+
+		if($structure->ifsubtype){
+			$subtype=strtolower($structure->subtype);
+
+			if($subtype==SMimeSignedEntityInterface::SUBTYPE){
+				array_unshift($arguments,$this,$sectionName,$children[0],$fetchNow);
+
+				return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createSMimeSignedEntity'],$arguments);
 			}
+		}
 
-			if($structure->ifdisposition&&($structure->disposition==AttachmentInterface::ATTACHMENT_DISPOSITION||AttachmentInterface::INLINE_DISPOSITION)){
-				$fileName=$this->getStructureParameter($structure,'dparameters','filename',null);
-				$arguments=$entityHeadersArguments;
-				array_unshift($arguments,$this,$sectionName,$fileName,$fetchNow);
+		array_unshift($arguments,$children,$fetchNow);
 
-				return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createImapAttachment'],$arguments);
-			}else{
-				$arguments=$entityHeadersArguments;
-				array_unshift($arguments,$this,$sectionName,$fetchNow);
+		return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createEntityContainer'],$arguments);
+	}
 
-				return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createImapLeafEntity'],$arguments);
+	protected function structureToLeafMimeEntity($structure,$fetchNow,$sectionName=null){
+		$arguments=$this->getEntityHeaderArguments($structure);
+
+		if($sectionName===null){
+			$sectionName='1';
+		}
+
+		if($structure->ifsubtype){
+			$subtype=strtolower($structure->subtype);
+			$smimeType=$this->getStructureParameter($structure,'parameters',strtolower(SMimeEncryptedEntityInterface::SMIME_TYPE_ATTRIBUTE_NAME),null);
+
+			if($subtype==SMimeEncryptedEntityInterface::SUBTYPE&&$smimeType===SMimeEncryptedEntityInterface::SMIME_TYPE){
+				array_unshift($arguments,$this,$sectionName,null,$fetchNow);
+
+				return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createSMimeEncryptedEntity'],$arguments);
 			}
+		}
+
+		if($structure->ifdisposition&&($structure->disposition==AttachmentInterface::ATTACHMENT_DISPOSITION||AttachmentInterface::INLINE_DISPOSITION)){
+			$fileName=$this->getStructureParameter($structure,'dparameters','filename',null);
+			array_unshift($arguments,$this,$sectionName,$fileName,$fetchNow);
+
+			return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createImapAttachment'],$arguments);
+		}else{
+			array_unshift($arguments,$this,$sectionName,$fetchNow);
+
+			return call_user_func_array([$this->mailbox->getImap()->getFactory(),'createImapLeafEntity'],$arguments);
 		}
 	}
 
 	protected function getEntityHeaderArguments($structure){
 		return [
 			$structure->type,
-			$structure->ifsubtype?$structure->subtype:null,
+			$structure->ifsubtype?strtolower($structure->subtype):null,
 			$structure->ifparameters?$this->objectParametersToArrayParameters($structure->parameters):[],
 			$structure->ifdisposition?$structure->disposition:null,
 			$structure->ifdparameters?$this->objectParametersToArrayParameters($structure->dparameters):[],

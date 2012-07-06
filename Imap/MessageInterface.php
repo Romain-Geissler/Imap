@@ -40,7 +40,13 @@ interface MessageInterface{
 
 	function clear();
 
+	function fetchRawHeaders($sectionName=null);
+
+	function fetchRawSectionBody($sectionName=null);
+
 	function fetchSectionBody($sectionName);
+
+	function fetchRawSection($sectionName=null);
 
 	function getTextEntities($fetchNow=false);
 
