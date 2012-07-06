@@ -2,8 +2,5 @@
 
 namespace Imap\Mime;
 
-interface ImapLeafEntityInterface extends LeafEntityInterface{
-	function getMessage();
-
-	function getSectionName();
+interface ImapLeafEntityInterface extends ImapEntityInterface,LeafEntityInterface{
 }

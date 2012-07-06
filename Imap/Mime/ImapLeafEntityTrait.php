@@ -2,33 +2,20 @@
 
 namespace Imap\Mime;
 
-use Imap\MessageInterface;
+use Imap\ImapException;
 
 trait ImapLeafEntityTrait{
-	protected $message;
-	protected $sectionName;
-
-	public function getMessage(){
-		return $this->message;
-	}
-
-	public function getSectionName(){
-		return $this->sectionName;
-	}
+	use ImapEntityTrait;
 
 	public function fetch(){
 		if($this->isFetched()){
 			return;
 		}
 
-		$this->setContent($this->message->fetchSectionBody($this->sectionName));
-	}
-
-	protected function setMessage(MessageInterface $message){
-		$this->message=$message;
-	}
-
-	protected function setSectionName($sectionName){
-		$this->sectionName=$sectionName;
+		try{
+			$this->setContent($this->message->fetchSectionBody($this->sectionName));
+		}catch(ImapException $e){
+			throw new MimeException('Failed to fetch imap body content.',$e);
+		}
 	}
 }
