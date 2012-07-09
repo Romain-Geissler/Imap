@@ -16,17 +16,17 @@ class Utils{
 		$filteredHeaders=[];
 
 		foreach($matches as $i=>$match){
-			if(!$include^(bool)preg_match('/content-/i',$match[1][0])){
+			if(!$include^(bool)preg_match('/^(content-|mime-version)/i',$match[1][0])){
 				if($i!=$count-1){
-					$filteredHeader=substr($rawHeaders,$match[0][1],$matches[$i+1][0][1]-$match[0][1]-2);
+					$filteredHeader=substr($rawHeaders,$match[0][1],$matches[$i+1][0][1]-$match[0][1]);
 				}else{
-					$filteredHeader=substr($rawHeaders,$match[0][1],-2);
+					$filteredHeader=substr($rawHeaders,$match[0][1]);
 				}
 
 				$filteredHeaders[]=$filteredHeader;
 			}
 		}
 
-		return implode("\r\n",$filteredHeaders)."\r\n\r\n";
+		return implode('',$filteredHeaders);
 	}
 }

@@ -105,10 +105,15 @@ abstract class AbstractSMimeEntity extends AbstractEntity implements SMimeEntity
 
 	protected function toHeaderString(array $envelope){
 		$headers=imap_mail_compose($envelope,$this->getBodies());
-		$headers=substr($headers,0,strpos($headers,"\r\n\r\n")+4);
-		$headers=Utils::filterMimeHeaders($headers,false);
+		$matches=[];
 
-		return substr($headers,0,-4);
+		if(!preg_match('/^\r\n/m',$headers,$matches,PREG_OFFSET_CAPTURE)){
+			throw new MimeException('Malformed header.');
+		}
+
+		$headers=substr($headers,0,$matches[0][1]+2);
+
+		return Utils::filterMimeHeaders($headers,false);
 	}
 
 	protected function getBodies(){

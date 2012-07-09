@@ -255,13 +255,13 @@ class Message implements MessageInterface{
 
 	public function fetchRawHeaders($sectionName=null){
 		if($sectionName===null){
-			return Utils::filterMimeHeaders($this->getRawHeaders(),true);
+			return Utils::filterMimeHeaders($this->getRawHeaders(),true)."\r\n";
 		}else{
 			if(($rawHeaders=imap_fetchmime($this->mailbox->getResource(),$this->id,$sectionName,FT_UID))===false){
 				throw new ImapException(sprintf('Failed to fetch headers for section "%s" in message "%s" in mailbox "%s"',$sectionName,$this,$this->mailbox));
 			}
 
-			return Utils::filterMimeHeaders($rawHeaders,true);
+			return Utils::filterMimeHeaders($rawHeaders,true)."\r\n";
 		}
 	}
 

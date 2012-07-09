@@ -106,7 +106,7 @@ class EntityContainer extends AbstractEntity implements EntityContainerInterface
 		$headers=$this->toHeaderString($envelope,$boundary);
 		$body=$this->toBodyString($childrenToString,$boundary);
 
-		return $headers."\r\n\r\n".$body;
+		return $headers."\r\n".$body;
 	}
 
 	protected function getChildOffsetFor(EntityInterface $lookForEntity){
@@ -136,8 +136,13 @@ class EntityContainer extends AbstractEntity implements EntityContainerInterface
 
 	protected function toHeaderString(array $envelope,$boundary){
 		$headers=imap_mail_compose($envelope,$this->getBodies($boundary));
+		$matches=[];
 
-		return substr($headers,0,strpos($headers,"\r\n\r\n"));
+		if(!preg_match('/^\r\n/m',$headers,$matches,PREG_OFFSET_CAPTURE)){
+			throw new MimeException('Malformed header.');
+		}
+
+		return substr($headers,0,$matches[0][1]);
 	}
 
 	protected function toBodyString(array $childrenToString,$boundary){
