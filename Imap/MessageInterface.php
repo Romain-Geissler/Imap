@@ -59,5 +59,13 @@ interface MessageInterface{
 
 	function getSingleAttachmentNamed($name,$fetchNow=false);
 
+	//This will work no matter the encrypted message is nested in a signature entity or not.
+	function decrypt(MailboxInterface $temporaryMailbox,$certificate,$privateKey=null,$requireEncryptedEntity=true);
+
+	//This will work no matter the signed message is nested in an encrypted entity or not.
+	//If you need to both decrypt and verify signature, better call "decrypt" first, as the signature
+	//might be enclose in the encrypted message, thus being ciphered at first.
+	function verifySignature(array $certificationAuthorities,$returnSignerPEMCertificate=true,$requireValidSignature=true);
+
 	function __toString();
 }

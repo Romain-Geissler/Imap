@@ -6,6 +6,8 @@ use Imap\Mime\Attachment\AttachmentInterface;
 use Imap\Mime\Utils;
 use Imap\Mime\SMimeSignedEntityInterface;
 use Imap\Mime\SMimeEncryptedEntityInterface;
+use Imap\Mime\SMimeEntityInterface;
+use Imap\Mime\MimeException;
 
 class Message implements MessageInterface{
 	protected $mailbox;
@@ -330,6 +332,60 @@ class Message implements MessageInterface{
 
 	public function getSingleAttachmentNamed($name,$fetchNow=false){
 		return $this->getTopMimeEntity(false)->getSingleAttachmentNamed($name,$fetchNow);
+	}
+
+	public function decrypt(MailboxInterface $temporaryMailbox,$certificate,$privateKey=null,$requireEncryptedEntity=true){
+		$entity=$this->getTopMimeEntity();
+
+		while(true){
+			if(!$entity instanceof SMimeEntityInterface){
+				if($requireEncryptedEntity){
+					throw new MimeException('No encrypted entity found.');
+				}
+
+				return false;
+			}
+
+			if(!$entity instanceof SMimeEncryptedEntityInterface){
+				$entity=$entity->getContentEntity();
+
+				continue;
+			}else{
+				break;
+			}
+		}
+
+		$entity->decrypt($temporaryMailbox,$certificate,$privateKey);
+	}
+
+	public function verifySignature(array $certificationAuthorities,$returnSignerPEMCertificate=true,$requireValidSignature=true){
+		$entity=$this->getTopMimeEntity();
+
+		while(true){
+			if(!$entity instanceof SMimeEntityInterface){
+				if($requireValidSignature){
+					throw new MimeException('No signed entity found.');
+				}
+
+				return false;
+			}
+
+			if(!$entity instanceof SMimeSignedEntityInterface){
+				$entity=$entity->getContentEntity();
+
+				continue;
+			}else{
+				break;
+			}
+		}
+
+		$result=$entity->verifySignature($certificationAuthorities,$returnSignerPEMCertificate);
+
+		if($result===false&&$requireValidSignature){
+			throw new MimeException('The found signature could not be verified.');
+		}
+
+		return $result;
 	}
 
 	public function __toString(){
